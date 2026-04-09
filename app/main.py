@@ -31,7 +31,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"🚀 WhatsApp SaaS iniciando — entorno: {settings.environment}")
     logger.info(f"   DB: {settings.database_url.split('@')[-1]}")  # Oculta credenciales
     logger.info(f"   Meta API version: {settings.meta_api_version}")
-
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("✅ tables verified/created")
     yield  # La app corre aquí
 
     logger.info("Apagando aplicación...")
