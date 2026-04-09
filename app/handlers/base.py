@@ -67,10 +67,7 @@ class BaseHandler(ABC):
             from app.services.staff_service import get_active_staff, format_staff_list
             staff_list = await get_active_staff(db, tenant.id)
             if staff_list:
-                names = format_staff_list(staff_list) if not hasattr(format_staff_list, '__await__') else await format_staff_list(staff_list)
-                # format_staff_list no es async, llamar directo
-                from app.services.staff_service import format_staff_list as fsl
-                staff_names = fsl(staff_list)
+                staff_names = format_staff_list(staff_list)
                 base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
         except Exception as e:
             logger.warning(f"No se pudo cargar staff: {e}")
