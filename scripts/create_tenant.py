@@ -105,6 +105,7 @@ async def main() -> None:
     print(f"  Bot prompt:   {'Sí' if system_prompt else 'No (se puede agregar después)'}")
     print(f"{'='*50}")
 
+    if "--yes" not in sys.argv:
     confirm = input("\n¿Confirmar creación? [s/N]: ").strip().lower()
     if confirm not in ("s", "si", "sí", "y", "yes"):
         print("Cancelado.")

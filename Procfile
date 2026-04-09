@@ -1,1 +1,1 @@
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: python scripts/create_tenant.py --name "Acvex" --type barberia --phone "+5214492762190" --phone-id "1009575635579251" --waba-id "1590552728868726" --slug "acvex" --yes && uvicorn app.main:app --host 0.0.0.0 --port $PORT
