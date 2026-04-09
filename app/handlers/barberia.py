@@ -11,13 +11,25 @@ from app.models.contact import Contact
 class BarberiaHandler(BaseHandler):
 
     def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
-        # Si el tenant tiene su propio prompt, usarlo como base
+        from datetime import datetime, timezone
         custom_prompt = tenant.bot_system_prompt or ""
-
         client_name = contact.name if contact.name != "Sin nombre" else "cliente"
+        today = datetime.now(timezone.utc).strftime("%A %d de %B de %Y")
+
+        # Traducir día y mes al español
+        days = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
+                "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado",
+                "Sunday": "Domingo"}
+        months = {"January": "enero", "February": "febrero", "March": "marzo",
+                  "April": "abril", "May": "mayo", "June": "junio",
+                  "July": "julio", "August": "agosto", "September": "septiembre",
+                  "October": "octubre", "November": "noviembre", "December": "diciembre"}
+        for en, es in {**days, **months}.items():
+            today = today.replace(en, es)
 
         return f"""Eres el asistente virtual de {tenant.name}, una barbería profesional.
 Estás atendiendo a {client_name} por WhatsApp.
+Hoy es {today}. Usa esta fecha para calcular correctamente días como "mañana", "el viernes", etc.
 
 {custom_prompt}
 
