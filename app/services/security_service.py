@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 INJECTION_PATTERNS = [
     # Intentos de ignorar instrucciones
     r"ignora\s+(todas?\s+)?(las?\s+)?(instrucciones|reglas|sistema|prompt)",
+    r"ignora\s+.{0,20}\s*(instrucciones|reglas|sistema|prompt)",
+    r"ignora\s+(todo|everything)",
     r"olvida\s+(todo|las?\s+instrucciones|tu\s+rol)",
     r"ignore\s+(all\s+)?(previous\s+)?(instructions|rules|system)",
     r"forget\s+(everything|instructions|your\s+role)",
