@@ -1,21 +1,16 @@
 """
 BaseHandler — clase base para todos los handlers de vertical.
-Implementa la lógica común: cargar historial, llamar a IA, parsear acciones.
 """
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
 from app.models.contact import Contact
 from app.models.conversation import Conversation
-from app.services.ai_service import (
-    get_conversation_history,
-    generate_response,
-    parse_action,
-)
+from app.services.ai_service import get_conversation_history, generate_response, parse_action
 from app.services.security_service import validate_and_sanitize
 
 logger = logging.getLogger(__name__)
@@ -25,7 +20,6 @@ class BaseHandler(ABC):
 
     @abstractmethod
     def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
-        """Construye el system prompt para este tenant y vertical."""
         ...
 
     async def handle_message(
@@ -36,27 +30,17 @@ class BaseHandler(ABC):
         message: str,
         db: AsyncSession,
     ) -> str:
-        """
-        Flujo principal:
-        1. Valida y sanitiza el mensaje (seguridad)
-        2. Carga historial de conversación
-        3. Construye system prompt
-        4. Llama a OpenAI
-        5. Parsea acciones (si las hay)
-        6. Ejecuta la acción
-        7. Retorna la respuesta limpia
-        """
-        # 1. Seguridad — validar y sanitizar
+        # 1. Seguridad
         is_valid, processed_message = validate_and_sanitize(message)
         if not is_valid:
             logger.warning(f"Mensaje rechazado por seguridad para tenant {tenant.slug}")
             return processed_message
 
-        # 2. Cargar historial
+        # 2. Historial
         history = await get_conversation_history(db, conversation.id)
 
-        # 3. System prompt
-        system_prompt = self.get_system_prompt(tenant, contact)
+        # 3. System prompt con lista de barberos disponibles (si aplica)
+        system_prompt = await self._build_system_prompt(tenant, contact, db)
 
         # 4. Llamar a IA
         raw_response = await generate_response(system_prompt, history, processed_message)
@@ -64,13 +48,37 @@ class BaseHandler(ABC):
         # 5. Parsear acción
         clean_response, action = parse_action(raw_response)
 
-        # 6. Ejecutar acción si existe
+        # 6. Ejecutar acción
         if action:
             action_result = await self.execute_action(action, tenant, contact, db)
             if action_result:
                 clean_response = action_result
 
         return clean_response
+
+    async def _build_system_prompt(
+        self, tenant: Tenant, contact: Contact, db: AsyncSession
+    ) -> str:
+        """Construye el system prompt e inyecta la lista de barberos activos."""
+        base_prompt = self.get_system_prompt(tenant, contact)
+
+        # Inyectar lista de staff si el tenant tiene barberos configurados
+        try:
+            from app.services.staff_service import get_active_staff, format_staff_list
+            staff_list = await get_active_staff(db, tenant.id)
+            if staff_list:
+                names = format_staff_list(staff_list) if not hasattr(format_staff_list, '__await__') else await format_staff_list(staff_list)
+                # format_staff_list no es async, llamar directo
+                from app.services.staff_service import format_staff_list as fsl
+                staff_names = fsl(staff_list)
+                base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
+        except Exception as e:
+            logger.warning(f"No se pudo cargar staff: {e}")
+
+        return base_prompt
+
+    def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
+        return ""
 
     async def execute_action(
         self,
@@ -79,10 +87,6 @@ class BaseHandler(ABC):
         contact: Contact,
         db: AsyncSession,
     ) -> str | None:
-        """
-        Ejecuta acciones detectadas en la respuesta del bot.
-        Soporta: create_appointment
-        """
         action_type = action.get("action")
         logger.info(f"Acción detectada: {action_type} para tenant {tenant.slug}")
 
@@ -98,37 +102,69 @@ class BaseHandler(ABC):
         contact: Contact,
         db: AsyncSession,
     ) -> str | None:
-        """Crea una cita a partir de la acción detectada por la IA."""
         from app.services.appointment_service import create_appointment
+        from app.services.staff_service import (
+            get_staff_by_name, is_staff_available, get_available_staff, format_staff_list
+        )
 
         try:
             service = action.get("service", "Consulta")
             date_str = action.get("date")
             time_str = action.get("time")
+            staff_name = action.get("staff_name")
 
             if not date_str or not time_str:
-                logger.warning(f"Acción create_appointment sin fecha/hora: {action}")
+                logger.warning(f"Acción sin fecha/hora: {action}")
                 return None
 
-            # Parsear fecha y hora
-            scheduled_at = datetime.strptime(
-                f"{date_str} {time_str}", "%Y-%m-%d %H:%M"
-            )
+            scheduled_at = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+            scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
 
+            staff_id = None
+            staff_member = None
+
+            # Buscar el barbero solicitado
+            if staff_name:
+                staff_member = await get_staff_by_name(db, tenant.id, staff_name)
+
+                if staff_member:
+                    # Verificar disponibilidad
+                    available = await is_staff_available(
+                        db, staff_member.id, scheduled_at, staff_member.appointment_duration
+                    )
+                    if not available:
+                        # Barbero no disponible — buscar otros
+                        other_staff = await get_available_staff(db, tenant.id, scheduled_at)
+                        if other_staff:
+                            names = format_staff_list(other_staff)
+                            return (
+                                f"Lo siento, {staff_member.name} no está disponible a esa hora. "
+                                f"Estos barberos sí están disponibles: {names}. ¿Con cuál prefieres?"
+                            )
+                        else:
+                            return (
+                                f"Lo siento, no hay barberos disponibles el {date_str} a las {time_str}. "
+                                f"¿Quieres intentar con otro horario?"
+                            )
+                    staff_id = staff_member.id
+
+            # Crear la cita
             appointment = await create_appointment(
                 db=db,
                 tenant_id=tenant.id,
                 contact_id=contact.id,
                 title=service,
                 scheduled_at=scheduled_at,
+                staff_id=staff_id,
                 source="chatbot",
             )
 
-            logger.info(f"Cita agendada: {appointment.id} — {service} el {date_str}")
+            staff_info = f" con {staff_member.name}" if staff_member else ""
+            logger.info(f"Cita agendada: {appointment.id} — {service}{staff_info} el {date_str}")
             return None  # La IA ya generó el mensaje de confirmación
 
         except ValueError as e:
-            logger.error(f"Error parseando fecha de la acción: {e} — {action}")
+            logger.error(f"Error parseando fecha: {e}")
             return None
         except Exception as e:
             logger.error(f"Error creando cita: {e}")

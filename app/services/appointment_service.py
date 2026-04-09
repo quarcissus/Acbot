@@ -29,6 +29,7 @@ async def create_appointment(
     description: str | None = None,
     notes: str | None = None,
     source: str = "chatbot",
+    staff_id: uuid.UUID | None = None,
 ) -> Appointment:
     """
     Crea una nueva cita en la base de datos.
@@ -43,6 +44,7 @@ async def create_appointment(
         notes=notes,
         source=source,
         status="confirmed",
+        staff_id=staff_id,
     )
     db.add(appointment)
     await db.flush()

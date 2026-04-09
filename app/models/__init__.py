@@ -7,5 +7,6 @@ from app.models.tenant import Tenant
 from app.models.contact import Contact
 from app.models.conversation import Conversation, Message
 from app.models.appointment import Appointment
+from app.models.staff import Staff
 
-__all__ = ["Tenant", "Contact", "Conversation", "Message", "Appointment"]
+__all__ = ["Tenant", "Contact", "Conversation", "Message", "Appointment", "Staff"]

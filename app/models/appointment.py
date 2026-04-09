@@ -37,6 +37,9 @@ class Appointment(Base):
     )  # "chatbot" | "manual" | "api"
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("staff.id", ondelete="SET NULL"), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -48,6 +51,7 @@ class Appointment(Base):
     # Relaciones
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="appointments")  # noqa: F821
     contact: Mapped["Contact"] = relationship("Contact", back_populates="appointments")  # noqa: F821
+    staff: Mapped["Staff | None"] = relationship("Staff", back_populates="appointments")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<Appointment '{self.title}' at {self.scheduled_at}>"
