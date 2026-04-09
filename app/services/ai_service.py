@@ -60,7 +60,6 @@ async def generate_response(
 
     try:
         logger.info(f"Llamando OpenAI modelo={settings.openai_model} mensajes={len(messages)}")
-        logger.debug(f"Messages payload: {messages}")
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
@@ -71,8 +70,21 @@ async def generate_response(
 
     except Exception as e:
         logger.error(f"Error llamando a OpenAI: {e}")
-        logger.error(f"Modelo usado: {settings.openai_model}")
-        logger.error(f"Num mensajes: {len(messages)}")
+
+        # Reintento sin historial — solo system prompt + mensaje actual
+        if len(messages) > 2:
+            logger.info("Reintentando sin historial...")
+            try:
+                response = await client.chat.completions.create(
+                    model=settings.openai_model,
+                    messages=[messages[0], messages[-1]],  # solo system + último mensaje
+                    max_tokens=500,
+                    temperature=0.7,
+                )
+                return response.choices[0].message.content.strip()
+            except Exception as e2:
+                logger.error(f"Reintento también falló: {e2}")
+
         return "Disculpa, estoy teniendo problemas técnicos. ¿Puedes intentarlo de nuevo?"
 
 
