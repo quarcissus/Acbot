@@ -187,12 +187,8 @@ async def _generate_response(
     db: AsyncSession,
 ) -> str:
     """
-    FASE 1: Genera un echo simple del mensaje.
-    FASE 2: Aquí se importará y llamará al handler correcto según tenant.business_type.
+    FASE 2: Llama al handler correcto según el business_type del tenant.
     """
-    # TODO Fase 2: reemplazar con:
-    # from app.handlers.router import get_handler
-    # handler = get_handler(tenant.business_type)
-    # return await handler.handle_message(tenant, contact, conversation, message_body, db)
-
-    return f"Echo [{tenant.name}]: {message_body}"
+    from app.handlers import get_handler
+    handler = get_handler(tenant.business_type)
+    return await handler.handle_message(tenant, contact, conversation, message_body, db)
