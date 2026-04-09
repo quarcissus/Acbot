@@ -11,9 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.core.database import engine, Base
-import app.models 
 from app.gateway.webhook import router as webhook_router
-
+from app.services.reminder_service import start_scheduler, stop_scheduler
+import app.models  # noqa: F401 — necesario para que Base conozca los modelos
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -30,13 +30,21 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Acciones al iniciar y apagar la aplicación."""
     logger.info(f"🚀 WhatsApp SaaS iniciando — entorno: {settings.environment}")
-    logger.info(f"   DB: {settings.database_url.split('@')[-1]}")  # Oculta credenciales
+    logger.info(f"   DB: {settings.database_url.split('@')[-1]}")
     logger.info(f"   Meta API version: {settings.meta_api_version}")
+
+    # Crear tablas si no existen
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("✅ tables verified/created")
+
+    # Iniciar scheduler de recordatorios
+    start_scheduler()
+
     yield  # La app corre aquí
 
+    # Apagado limpio
+    stop_scheduler()
     logger.info("Apagando aplicación...")
     await engine.dispose()
     logger.info("Conexiones de DB cerradas")
@@ -46,13 +54,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="WhatsApp SaaS",
     description="Plataforma multi-tenant de chatbot con WhatsApp",
-    version="0.1.0",
+    version="0.3.0",
     lifespan=lifespan,
     docs_url="/docs" if not settings.is_production else None,
     redoc_url=None,
 )
 
-# CORS — en producción limitar a tu dominio
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if not settings.is_production else [settings.webhook_base_url],
@@ -60,16 +68,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(webhook_router)
-# Fase 4: app.include_router(tenants_router, prefix="/api/v1")
-# Fase 4: app.include_router(contacts_router, prefix="/api/v1")
 
 
 @app.get("/", tags=["health"])
 async def root() -> dict:
-    return {"status": "ok", "service": "whatsapp-saas", "version": "0.1.0"}
+    return {"status": "ok", "service": "whatsapp-saas", "version": "0.3.0"}
 
 
 @app.get("/health", tags=["health"])
@@ -79,4 +84,5 @@ async def health_check() -> dict:
         "environment": settings.environment,
         "meta_configured": bool(settings.meta_access_token),
         "openai_configured": bool(settings.openai_api_key),
+        "scheduler_running": True,
     }
