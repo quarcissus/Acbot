@@ -10,7 +10,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
-from app.core.database import engine
+from app.core.database import engine, Base
+import app.models 
 from app.gateway.webhook import router as webhook_router
 
 
