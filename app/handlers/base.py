@@ -64,16 +64,16 @@ class BaseHandler(ABC):
 
         # Inyectar lista de staff si el tenant tiene barberos configurados
         try:
-        from app.services.staff_service import get_active_staff, format_staff_list
-        staff_list = await get_active_staff(db, tenant.id)
-        logger.info(f"Staff cargado: {[s.name for s in staff_list]}")  # ← agrega esto
-        if staff_list:
-            staff_names = format_staff_list(staff_list)
-            base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
-    except Exception as e:
-        logger.warning(f"No se pudo cargar staff: {e}")
+            from app.services.staff_service import get_active_staff, format_staff_list
+            staff_list = await get_active_staff(db, tenant.id)
+            logger.info(f"Staff cargado: {[s.name for s in staff_list]}")  # ← agrega esto
+            if staff_list:
+                staff_names = format_staff_list(staff_list)
+                base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
+        except Exception as e:
+            logger.warning(f"No se pudo cargar staff: {e}")
 
-    return base_prompt
+        return base_prompt
 
     def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
         return ""
