@@ -106,11 +106,10 @@ async def main() -> None:
     print(f"{'='*50}")
 
     if "--yes" not in sys.argv:
-    confirm = input("\n¿Confirmar creación? [s/N]: ").strip().lower()
-    if confirm not in ("s", "si", "sí", "y", "yes"):
-        print("Cancelado.")
-        sys.exit(0)
-
+        confirm = input("\n¿Confirmar creación? [s/N]: ").strip().lower()
+        if confirm not in ("s", "si", "sí", "y", "yes"):
+            print("Cancelado.")
+            sys.exit(0)
     # Crear tenant
     tenant_data = TenantCreate(
         name=args.name,
