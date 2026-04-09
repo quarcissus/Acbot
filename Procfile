@@ -1,1 +1,1 @@
-web: python scripts/create_staff.py --tenant-slug "acvex" --name "Carlos" --yes && python scripts/create_staff.py --tenant-slug "acvex" --name "Miguel" --yes && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
