@@ -72,6 +72,7 @@ def parse_args() -> argparse.Namespace:
         default=24,
         help="Horas antes para enviar recordatorio de cita (default: 24)",
     )
+    parser.add_argument("--yes", action="store_true", help="Saltar confirmación")
     return parser.parse_args()
 
 
