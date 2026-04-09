@@ -104,7 +104,7 @@ class BaseHandler(ABC):
     ) -> str | None:
         from app.services.appointment_service import create_appointment
         from app.services.staff_service import (
-            get_staff_by_name, is_staff_available, get_available_staff, format_staff_list
+            get_staff_by_name, is_staff_available, get_available_staff
         )
 
         try:
@@ -136,10 +136,11 @@ class BaseHandler(ABC):
                         # Barbero no disponible — buscar otros
                         other_staff = await get_available_staff(db, tenant.id, scheduled_at)
                         if other_staff:
-                            names = format_staff_list(other_staff)
+                            other_names = [s.name for s in other_staff]
+                            names_str = ", ".join(other_names[:-1]) + f" o {other_names[-1]}" if len(other_names) > 1 else other_names[0]
                             return (
                                 f"Lo siento, {staff_member.name} no está disponible a esa hora. "
-                                f"Estos barberos sí están disponibles: {names}. ¿Con cuál prefieres?"
+                                f"Estos barberos sí están disponibles: {names_str}. ¿Con cuál prefieres?"
                             )
                         else:
                             return (
