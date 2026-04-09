@@ -59,6 +59,8 @@ async def generate_response(
     ]
 
     try:
+        logger.info(f"Llamando OpenAI modelo={settings.openai_model} mensajes={len(messages)}")
+        logger.debug(f"Messages payload: {messages}")
         response = await client.chat.completions.create(
             model=settings.openai_model,
             messages=messages,
@@ -69,6 +71,8 @@ async def generate_response(
 
     except Exception as e:
         logger.error(f"Error llamando a OpenAI: {e}")
+        logger.error(f"Modelo usado: {settings.openai_model}")
+        logger.error(f"Num mensajes: {len(messages)}")
         return "Disculpa, estoy teniendo problemas técnicos. ¿Puedes intentarlo de nuevo?"
 
 
