@@ -60,8 +60,8 @@ class BarberiaHandler(BaseHandler):
             today = today.replace(en, es)
 
         # Horario válido para hoy (#8)
-        business_hours = {0: "9:00-20:00", 1: "9:00-20:00", 2: "9:00-20:00",
-                          3: "9:00-20:00", 4: "9:00-20:00", 5: "9:00-18:00", 6: "10:00-15:00"}
+        business_hours = {0: "8:00-20:00", 1: "8:00-20:00", 2: "8:00-20:00",
+                          3: "8:00-20:00", 4: "8:00-20:00", 5: "8:00-18:00", 6: "10:00-15:00"}
         today_hours = business_hours.get(current_weekday, "cerrado")
 
         return f"""Eres el asistente virtual de {tenant.name}, una barbería profesional.
@@ -81,16 +81,25 @@ SERVICIOS Y PRECIOS:
 • Tinte: desde $200
 
 HORARIOS DEL NEGOCIO:
-• Lunes a viernes: 9:00am - 8:00pm
-• Sábados: 9:00am - 6:00pm
+• Lunes a viernes: 8:00am - 8:00pm
+• Sábados: 8:00am - 6:00pm
 • Domingos: 10:00am - 3:00pm
 • Horario de hoy: {today_hours}
 
 REGLAS PARA AGENDAR CITAS:
 1. Antes de agendar SIEMPRE reúne estos 5 datos: nombre, servicio, fecha, hora y barbero.
-2. IMPORTANTE — Validar horario (#8): Si el cliente pide una hora fuera del horario del negocio,
-   dile amablemente que ese horario no está disponible y sugiere el más cercano dentro del horario.
-   Ejemplo: si piden las 9pm un viernes, di "Cerramos a las 8pm, ¿te funciona a las 7:30pm?"
+2. IMPORTANTE — Interpretar horas del cliente:
+   - Horas claramente de día (9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7): interprétalas como AM si son
+     9-12, o como PM (tarde) si son 1-7. Nunca como madrugada.
+   - Horas AMBIGUAS que pueden ser AM o PM: el 8 es ambiguo porque la barbería abre a las 8am
+     Y también hay actividad a las 8pm (cierre). Si el cliente dice solo "8" o "las 8" sin
+     aclarar, PREGUNTA: "¿Las 8 de la mañana o las 8 de la noche?"
+   - Ejemplos claros sin preguntar: "las 3" = 15:00, "las 11" = 11:00, "las 7" = 19:00.
+   - Ejemplos que SÍ requieren preguntar: "a las 8", "las 8 en punto".
+3. IMPORTANTE — Validar horario (#8): SOLO rechaza si la hora está fuera del horario del negocio.
+   Horario válido lunes-viernes: 8:00-20:00. Sábado: 8:00-18:00. Domingo: 10:00-15:00.
+   Ejemplo de rechazo correcto: cliente pide 9pm un viernes → fuera de horario (cierra 8pm).
+   Ejemplo de error a EVITAR: cliente pide "las 3" → es 15:00 → DENTRO del horario, no rechazar.
 3. Cuando tengas todos los datos Y el horario sea válido, responde ÚNICAMENTE con la acción:
    ###ACTION###
    {{"action": "create_appointment", "service": "servicio", "date": "YYYY-MM-DD", "time": "HH:MM", "client_name": "nombre", "staff_name": "nombre del barbero"}}

@@ -158,12 +158,12 @@ async def get_next_available_slots(
 
     # Horario estándar de barbería (hora México UTC-6)
     DEFAULT_HOURS = {
-        0: (9, 20),   # Lunes
-        1: (9, 20),   # Martes
-        2: (9, 20),   # Miércoles
-        3: (9, 20),   # Jueves
-        4: (9, 20),   # Viernes
-        5: (9, 18),   # Sábado
+        0: (8, 20),   # Lunes
+        1: (8, 20),   # Martes
+        2: (8, 20),   # Miércoles
+        3: (8, 20),   # Jueves
+        4: (8, 20),   # Viernes
+        5: (8, 18),   # Sábado
         6: (10, 15),  # Domingo
     }
     hours = business_hours or DEFAULT_HOURS
