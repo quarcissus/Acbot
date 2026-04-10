@@ -3,7 +3,7 @@ Handler para barberías.
 El bot pregunta con qué barbero quiere el cliente y valida disponibilidad.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.handlers.base import BaseHandler
 from app.models.tenant import Tenant

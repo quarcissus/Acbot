@@ -48,22 +48,51 @@ async def is_staff_available(
 ) -> bool:
     """
     Verifica si un empleado está disponible en el horario solicitado.
-    Bloquea si hay una cita exactamente a la misma hora.
+
+    Detecta traslapes reales: dos citas se traslapan si el inicio de una
+    cae dentro del rango [inicio, fin) de la otra.
+
+    Cita A: [scheduled_at_A, scheduled_at_A + duration_A)
+    Cita B: [scheduled_at_B, scheduled_at_B + duration_B)
+    Traslape cuando: A.start < B.end  AND  B.start < A.end
     """
     scheduled_at_utc = scheduled_at.replace(tzinfo=timezone.utc) if scheduled_at.tzinfo is None else scheduled_at
+    new_end = scheduled_at_utc + timedelta(minutes=duration_minutes)
 
+    # Buscar citas del staff que se traslapen con el nuevo rango
+    # existing.start < new_end  AND  new_start < existing.start + existing.duration
+    # Como no guardamos duration en UTC calculamos: existing.start + existing.duration
+    # via columna duration_minutes del appointment
     result = await db.execute(
         select(Appointment).where(
             and_(
                 Appointment.staff_id == staff_id,
                 Appointment.status.in_(["confirmed", "pending"]),
-                Appointment.scheduled_at == scheduled_at_utc,
+                # La cita existente empieza antes de que termine la nueva
+                Appointment.scheduled_at < new_end,
+                # La nueva cita empieza antes de que termine la existente
+                # (scheduled_at_utc < existing.scheduled_at + existing.duration_minutes)
+                # Equivalente: existing.scheduled_at > scheduled_at_utc - existing.duration
+                # Lo manejamos filtrando en Python tras traer candidatos cercanos
+                Appointment.scheduled_at > scheduled_at_utc - timedelta(hours=4),  # ventana máxima
             )
         )
     )
-    existing = result.scalar_one_or_none()
-    logger.info(f"Disponibilidad staff_id={staff_id} en {scheduled_at_utc}: {'ocupado' if existing else 'libre'}")
-    return existing is None
+    candidates = list(result.scalars().all())
+
+    for appt in candidates:
+        appt_start = appt.scheduled_at.replace(tzinfo=timezone.utc) if appt.scheduled_at.tzinfo is None else appt.scheduled_at
+        appt_end = appt_start + timedelta(minutes=appt.duration_minutes)
+        # Traslape real: new_start < appt_end AND appt_start < new_end
+        if scheduled_at_utc < appt_end and appt_start < new_end:
+            logger.info(
+                f"Disponibilidad staff_id={staff_id} en {scheduled_at_utc}: "
+                f"ocupado (traslapa con cita {appt.id} [{appt_start}–{appt_end}])"
+            )
+            return False
+
+    logger.info(f"Disponibilidad staff_id={staff_id} en {scheduled_at_utc}: libre")
+    return True
 
 
 async def get_available_staff(
