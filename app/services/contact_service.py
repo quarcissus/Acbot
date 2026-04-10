@@ -20,9 +20,7 @@ async def get_or_create_contact(
 ) -> tuple[Contact, bool]:
     """
     Busca un contacto existente o crea uno nuevo.
-
-    Returns:
-        (contact, created) — created=True si se acaba de crear.
+    Returns: (contact, created) — created=True si se acaba de crear.
     """
     result = await db.execute(
         select(Contact).where(
@@ -37,11 +35,7 @@ async def get_or_create_contact(
     if contact:
         return contact, False
 
-    contact = Contact(
-        tenant_id=tenant_id,
-        phone_number=phone_number,
-        name=name,
-    )
+    contact = Contact(tenant_id=tenant_id, phone_number=phone_number, name=name)
     db.add(contact)
     await db.flush()
     logger.info(f"Contacto creado: {phone_number} para tenant {tenant_id}")
@@ -52,10 +46,7 @@ async def get_contact_by_id(
     db: AsyncSession,
     contact_id: uuid.UUID,
 ) -> Contact | None:
-    """Busca un contacto por ID."""
-    result = await db.execute(
-        select(Contact).where(Contact.id == contact_id)
-    )
+    result = await db.execute(select(Contact).where(Contact.id == contact_id))
     return result.scalar_one_or_none()
 
 
@@ -64,7 +55,6 @@ async def get_contact_by_phone(
     tenant_id: uuid.UUID,
     phone_number: str,
 ) -> Contact | None:
-    """Busca un contacto por número de teléfono dentro de un tenant."""
     result = await db.execute(
         select(Contact).where(
             and_(
@@ -78,30 +68,26 @@ async def get_contact_by_phone(
 
 async def update_contact_name(
     db: AsyncSession,
-    contact_id: uuid.UUID,
+    contact: Contact,
     name: str,
-) -> Contact | None:
-    """Actualiza el nombre de un contacto."""
-    contact = await get_contact_by_id(db, contact_id)
-    if not contact:
-        return None
-    contact.name = name
-    await db.flush()
-    logger.info(f"Nombre actualizado para contacto {contact_id}: {name}")
+) -> Contact:
+    """Actualiza el nombre de un contacto si aún no tiene uno real."""
+    if name and name.strip() and contact.name in ("Sin nombre", "", None):
+        contact.name = name.strip().title()
+        await db.flush()
+        logger.info(f"Nombre guardado para contacto {contact.id}: {contact.name}")
     return contact
 
 
-async def update_contact_notes(
+async def set_bot_enabled(
     db: AsyncSession,
-    contact_id: uuid.UUID,
-    notes: str,
-) -> Contact | None:
-    """Actualiza las notas de un contacto."""
-    contact = await get_contact_by_id(db, contact_id)
-    if not contact:
-        return None
-    contact.notes = notes
+    contact: Contact,
+    enabled: bool,
+) -> Contact:
+    """Activa o desactiva el bot para un contacto específico (handoff)."""
+    contact.bot_enabled = enabled
     await db.flush()
+    logger.info(f"bot_enabled={enabled} para contacto {contact.id} ({contact.phone_number})")
     return contact
 
 
@@ -111,7 +97,6 @@ async def list_contacts(
     limit: int = 100,
     offset: int = 0,
 ) -> list[Contact]:
-    """Lista todos los contactos de un tenant con paginación."""
     result = await db.execute(
         select(Contact)
         .where(Contact.tenant_id == tenant_id)

@@ -4,7 +4,7 @@ Modelo Contact — cliente final del negocio (el que escribe al WhatsApp).
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -22,6 +22,7 @@ class Contact(Base):
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
     name: Mapped[str] = mapped_column(String(200), default="Sin nombre")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bot_enabled: Mapped[bool] = mapped_column(Boolean, default=True)  # False = handoff activo
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

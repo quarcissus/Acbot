@@ -139,3 +139,90 @@ async def format_staff_list(staff_list: list[Staff]) -> str:
     if len(names) == 1:
         return names[0]
     return ", ".join(names[:-1]) + f" o {names[-1]}"
+
+async def get_next_available_slots(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    staff_id: uuid.UUID | None,
+    duration_minutes: int = 30,
+    slots_needed: int = 3,
+    business_hours: dict | None = None,
+) -> list[datetime]:
+    """
+    Retorna los próximos N slots disponibles para un staff (o cualquiera del tenant).
+
+    business_hours define los rangos válidos por día de semana (0=lunes, 6=domingo).
+    Si no se pasa, usa el horario estándar de barbería.
+    """
+    from datetime import date
+
+    # Horario estándar de barbería (hora México UTC-6)
+    DEFAULT_HOURS = {
+        0: (9, 20),   # Lunes
+        1: (9, 20),   # Martes
+        2: (9, 20),   # Miércoles
+        3: (9, 20),   # Jueves
+        4: (9, 20),   # Viernes
+        5: (9, 18),   # Sábado
+        6: (10, 15),  # Domingo
+    }
+    hours = business_hours or DEFAULT_HOURS
+
+    mexico_offset = timezone(timedelta(hours=-6))
+    now_mexico = datetime.now(timezone.utc).astimezone(mexico_offset)
+
+    slots: list[datetime] = []
+    check_date = now_mexico.date()
+    max_days = 14  # Buscar hasta 2 semanas hacia adelante
+
+    for _ in range(max_days):
+        weekday = check_date.weekday()
+        if weekday not in hours:
+            check_date += timedelta(days=1)
+            continue
+
+        open_h, close_h = hours[weekday]
+
+        # Empezar desde la hora actual si es hoy, si no desde apertura
+        if check_date == now_mexico.date():
+            start_h = max(open_h, now_mexico.hour + 1)  # siguiente hora completa
+        else:
+            start_h = open_h
+
+        for hour in range(start_h, close_h):
+            candidate_local = datetime(
+                check_date.year, check_date.month, check_date.day,
+                hour, 0, tzinfo=mexico_offset
+            )
+            candidate_utc = candidate_local.astimezone(timezone.utc)
+
+            # Verificar disponibilidad
+            if staff_id:
+                available = await is_staff_available(db, staff_id, candidate_utc, duration_minutes)
+            else:
+                # Cualquier staff disponible alcanza
+                any_available = await get_available_staff(db, tenant_id, candidate_utc, duration_minutes)
+                available = len(any_available) > 0
+
+            if available:
+                slots.append(candidate_local)
+                if len(slots) >= slots_needed:
+                    return slots
+
+        check_date += timedelta(days=1)
+
+    return slots
+
+
+def format_slots_for_whatsapp(slots: list[datetime]) -> str:
+    """Formatea lista de slots para mostrar al cliente en WhatsApp."""
+    if not slots:
+        return "No encontré disponibilidad en los próximos 14 días."
+
+    days_es = {0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves",
+               4: "Viernes", 5: "Sábado", 6: "Domingo"}
+    lines = []
+    for i, slot in enumerate(slots, 1):
+        day_name = days_es[slot.weekday()]
+        lines.append(f"  {i}. {day_name} {slot.strftime('%d/%m')} a las {slot.strftime('%H:%M')}")
+    return "\n".join(lines)

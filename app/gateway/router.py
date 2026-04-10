@@ -56,6 +56,15 @@ async def route_incoming_message(
     # 2. Buscar o crear contacto
     contact = await _get_or_create_contact(db, tenant.id, from_number)
 
+    # 2b. Verificar handoff — si el bot está deshabilitado para este contacto, no responder (#7)
+    if not contact.bot_enabled:
+        logger.info(f"Handoff activo para contacto {contact.phone_number} — bot silenciado")
+        await mark_as_read(phone_number_id, wa_message_id)
+        return
+
+    # 2c. Detectar si es primer mensaje del contacto para bienvenida (#5)
+    is_new_contact = contact.name == "Sin nombre" and not await _contact_has_history(db, contact.id)
+
     # 3. Buscar o crear conversación activa
     conversation = await _get_or_create_conversation(db, tenant.id, contact.id)
 
@@ -82,8 +91,20 @@ async def route_incoming_message(
     # 6. Marcar como leído (palomitas azules)
     await mark_as_read(phone_number_id, wa_message_id)
 
+    # 6b. Enviar mensaje de bienvenida si es primer contacto (#5)
+    if is_new_contact and tenant.bot_welcome_message:
+        welcome = tenant.bot_welcome_message
+        await send_text_message(phone_number_id=phone_number_id, to=from_number, body=welcome)
+        welcome_msg = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=welcome,
+            message_type="text",
+        )
+        db.add(welcome_msg)
+        await db.flush()
+
     # 7. Generar respuesta
-    # FASE 1: Echo simple. En Fase 2 esto llamará al handler correspondiente.
     response_text = await _generate_response(tenant, contact, conversation, message_body, db)
 
     # 8. Guardar respuesta del bot
@@ -218,3 +239,12 @@ async def _generate_response(
     from app.handlers import get_handler
     handler = get_handler(tenant.business_type)
     return await handler.handle_message(tenant, contact, conversation, message_body, db)
+
+
+async def _contact_has_history(db: AsyncSession, contact_id) -> bool:
+    """Verifica si un contacto ya tiene conversaciones previas (para detectar primer mensaje)."""
+    from app.models.conversation import Conversation
+    result = await db.execute(
+        select(Conversation.id).where(Conversation.contact_id == contact_id).limit(1)
+    )
+    return result.scalar_one_or_none() is not None
