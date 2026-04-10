@@ -4,7 +4,7 @@ BaseHandler — clase base para todos los handlers de vertical.
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
@@ -51,8 +51,11 @@ class BaseHandler(ABC):
         # 6. Ejecutar acción
         if action:
             action_result = await self.execute_action(action, tenant, contact, db)
+            # Siempre usar el resultado del código, nunca el texto de la IA
+            # Esto evita que lleguen 2 mensajes
             if action_result:
-                clean_response = action_result
+                return action_result
+            return "¡Tu cita ha sido agendada! Te enviaremos un recordatorio antes de tu cita."
 
         return clean_response
 
@@ -164,8 +167,13 @@ class BaseHandler(ABC):
             )
 
             staff_info = f" con {staff_member.name}" if staff_member else ""
+            # Formatear hora en México para mostrar al cliente
+            mexico_offset = timezone(timedelta(hours=-6))
+            local_time = scheduled_at.astimezone(mexico_offset)
+            fecha_legible = local_time.strftime("%d/%m/%Y a las %H:%M")
+
             logger.info(f"Cita agendada: {appointment.id} — {service}{staff_info} el {date_str}")
-            return None  # La IA ya generó el mensaje de confirmación
+            return f"✅ ¡Cita confirmada! Tu cita de {service}{staff_info} quedó agendada para el {fecha_legible}. Te enviaremos un recordatorio antes de tu cita."
 
         except ValueError as e:
             logger.error(f"Error parseando fecha: {e}")

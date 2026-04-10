@@ -48,24 +48,22 @@ async def is_staff_available(
 ) -> bool:
     """
     Verifica si un empleado está disponible en el horario solicitado.
-    Considera que una cita ocupa `duration_minutes` minutos.
+    Bloquea si hay una cita exactamente a la misma hora.
     """
     scheduled_at_utc = scheduled_at.replace(tzinfo=timezone.utc) if scheduled_at.tzinfo is None else scheduled_at
-    end_time = scheduled_at_utc + timedelta(minutes=duration_minutes)
 
-    # Buscar citas que se solapan en el horario
     result = await db.execute(
         select(Appointment).where(
             and_(
                 Appointment.staff_id == staff_id,
                 Appointment.status.in_(["confirmed", "pending"]),
-                Appointment.scheduled_at < end_time,
-                Appointment.scheduled_at >= scheduled_at_utc - timedelta(minutes=duration_minutes),
+                Appointment.scheduled_at == scheduled_at_utc,
             )
         )
     )
     existing = result.scalar_one_or_none()
-    return existing is None  # True = disponible
+    logger.info(f"Disponibilidad staff_id={staff_id} en {scheduled_at_utc}: {'ocupado' if existing else 'libre'}")
+    return existing is None
 
 
 async def get_available_staff(
