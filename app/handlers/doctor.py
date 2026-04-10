@@ -7,6 +7,12 @@ from app.models.contact import Contact
 
 class DoctorHandler(BaseHandler):
 
+    def staff_label_singular(self) -> str:
+        return "doctor"
+
+    def staff_label_plural(self) -> str:
+        return "doctores"
+
     def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
         from datetime import datetime, timezone
         custom_prompt = tenant.bot_system_prompt or ""

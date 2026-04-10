@@ -4,7 +4,7 @@ BaseHandler — clase base para todos los handlers de vertical.
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
@@ -62,26 +62,19 @@ class BaseHandler(ABC):
     async def _build_system_prompt(
         self, tenant: Tenant, contact: Contact, db: AsyncSession
     ) -> str:
-        """Construye el system prompt e inyecta la lista de barberos activos."""
-        base_prompt = self.get_system_prompt(tenant, contact)
+        """
+        Construye el system prompt base.
+        Subclases pueden sobreescribir para agregar contexto específico (staff, etc.)
+        """
+        return self.get_system_prompt(tenant, contact)
 
-        # Inyectar lista de staff si el tenant tiene barberos configurados
-        try:
-            from app.services.staff_service import get_active_staff
-            staff_list = await get_active_staff(db, tenant.id)
-            logger.info(f"Staff cargado: {[s.name for s in staff_list]}")
-            if staff_list:
-                names = [s.name for s in staff_list]
-                staff_names = ", ".join(names[:-1]) + f" o {names[-1]}" if len(names) > 1 else names[0]
-                base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
-                logger.info(f"System prompt incluye barberos: {staff_names}")
-        except Exception as e:
-            logger.warning(f"No se pudo cargar staff: {e}")
+    def staff_label_singular(self) -> str:
+        """Término para un empleado. Sobreescribir en cada handler."""
+        return "persona"
 
-        return base_prompt
-
-    def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
-        return ""
+    def staff_label_plural(self) -> str:
+        """Término para varios empleados. Sobreescribir en cada handler."""
+        return "personas disponibles"
 
     async def execute_action(
         self,
@@ -139,18 +132,26 @@ class BaseHandler(ABC):
                         db, staff_member.id, scheduled_at, staff_member.appointment_duration
                     )
                     if not available:
-                        # Barbero no disponible — buscar otros
+                        # Staff no disponible — buscar otros
                         other_staff = await get_available_staff(db, tenant.id, scheduled_at)
                         if other_staff:
                             other_names = [s.name for s in other_staff]
                             names_str = ", ".join(other_names[:-1]) + f" o {other_names[-1]}" if len(other_names) > 1 else other_names[0]
-                            return (
-                                f"Lo siento, {staff_member.name} no está disponible a esa hora. "
-                                f"Estos barberos sí están disponibles: {names_str}. ¿Con cuál prefieres?"
-                            )
+                            if len(other_names) > 1:
+                                label = self.staff_label_plural()
+                                return (
+                                    f"Lo siento, {staff_member.name} no está disponible a esa hora. "
+                                    f"Estos {label} sí están disponibles: {names_str}. ¿Con cuál prefieres?"
+                                )
+                            else:
+                                label = self.staff_label_singular()
+                                return (
+                                    f"Lo siento, {staff_member.name} no está disponible a esa hora. "
+                                    f"Este {label} sí está disponible: {names_str}. ¿Quieres que te agende con él?"
+                                )
                         else:
                             return (
-                                f"Lo siento, no hay barberos disponibles el {date_str} a las {time_str}. "
+                                f"Lo siento, no hay {self.staff_label_plural()} disponibles el {date_str} a las {time_str}. "
                                 f"¿Quieres intentar con otro horario?"
                             )
                     staff_id = staff_member.id

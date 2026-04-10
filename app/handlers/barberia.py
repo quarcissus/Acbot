@@ -4,12 +4,36 @@ El bot pregunta con qué barbero quiere el cliente y valida disponibilidad.
 """
 
 from datetime import datetime, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.handlers.base import BaseHandler
 from app.models.tenant import Tenant
 from app.models.contact import Contact
 
 
 class BarberiaHandler(BaseHandler):
+
+    def staff_label_singular(self) -> str:
+        return "barbero"
+
+    def staff_label_plural(self) -> str:
+        return "barberos"
+
+    async def _build_system_prompt(
+        self, tenant: Tenant, contact: Contact, db: AsyncSession
+    ) -> str:
+        """Sobreescribe base para inyectar lista de barberos activos."""
+        from app.services.staff_service import get_active_staff
+        base_prompt = self.get_system_prompt(tenant, contact)
+        try:
+            staff_list = await get_active_staff(db, tenant.id)
+            if staff_list:
+                names = [s.name for s in staff_list]
+                staff_names = ", ".join(names[:-1]) + f" o {names[-1]}" if len(names) > 1 else names[0]
+                base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
+                logger.info(f"System prompt incluye barberos: {staff_names}")
+        except Exception as e:
+            logger.warning(f"No se pudo cargar staff: {e}")
+        return base_prompt
 
     def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
         custom_prompt = tenant.bot_system_prompt or ""
@@ -47,8 +71,8 @@ HORARIOS:
 • Domingos: 10am - 3pm
 
 REGLAS PARA AGENDAR CITAS:
-1. Pregunta: servicio, fecha, hora y con qué barbero quiere
-2. Si el cliente menciona que la cita es para otra persona (amigo, familiar, etc.), SIEMPRE pregunta el nombre de esa persona antes de agendar
+1. Pregunta SIEMPRE estos 5 datos antes de agendar: nombre de quien va a la cita, servicio, fecha, hora y barbero
+2. Si el cliente no proporciona alguno de estos datos, pregúntalo antes de continuar
 3. Cuando tengas TODOS los datos, responde ÚNICAMENTE con la acción, sin texto adicional:
    ###ACTION###
    {{"action": "create_appointment", "service": "nombre del servicio", "date": "YYYY-MM-DD", "time": "HH:MM", "client_name": "nombre de quien va a la cita", "staff_name": "nombre del barbero"}}
@@ -61,6 +85,6 @@ OTRAS REGLAS:
 1. Responde SIEMPRE en español
 2. Sé amigable e informal
 3. Máximo 3-4 oraciones por respuesta
-4. Cuando el cliente quiera agendar, SIEMPRE lista los servicios con precios en tu primera respuesta. Ejemplo: "¡Claro! Ofrecemos: corte de cabello ($120), corte + barba ($180), barba ($80), corte fade ($150) y tinte (desde $200). ¿Cuál prefieres, para qué día y hora, y con cuál barbero: Carlos o Miguel?"
+4. Cuando el cliente quiera agendar, SIEMPRE lista los servicios con precios en tu primera respuesta, y menciona los barberos disponibles que están listados arriba en BARBEROS DISPONIBLES EN EL NEGOCIO. Ejemplo: "¡Claro! Ofrecemos: corte de cabello ($120), corte + barba ($180), barba ($80), corte fade ($150) y tinte (desde $200). Nuestros barberos son [lista de barberos]. ¿Cuál servicio prefieres, para qué día y hora, y con cuál barbero?"
 5. Si no sabes algo, di que pueden llamar directamente al negocio
 6. NUNCA inventes precios o servicios que no estén en tu contexto"""
