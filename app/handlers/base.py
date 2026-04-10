@@ -4,7 +4,7 @@ BaseHandler — clase base para todos los handlers de vertical.
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant import Tenant
