@@ -14,7 +14,7 @@ En Fase 2: se conecta con los handlers reales.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -143,10 +143,19 @@ async def _get_or_create_contact(
     return contact
 
 
+CONVERSATION_TIMEOUT_HOURS = 4  # Horas de inactividad para cerrar conversación
+
+
 async def _get_or_create_conversation(
     db: AsyncSession, tenant_id, contact_id
 ) -> Conversation:
-    """Busca una conversación activa o crea una nueva."""
+    """
+    Busca una conversación activa o crea una nueva.
+
+    Si la conversación activa tiene más de CONVERSATION_TIMEOUT_HOURS horas
+    sin actividad, se cierra y se abre una nueva — así el cliente siempre
+    empieza con contexto limpio después de una pausa larga.
+    """
     result = await db.execute(
         select(Conversation).where(
             and_(
@@ -157,6 +166,23 @@ async def _get_or_create_conversation(
         )
     )
     conversation = result.scalar_one_or_none()
+
+    if conversation:
+        # Verificar si la conversación expiró por inactividad
+        last_activity = conversation.last_message_at or conversation.created_at
+        # Asegurar que last_activity tenga timezone para comparar
+        if last_activity.tzinfo is None:
+            last_activity = last_activity.replace(tzinfo=timezone.utc)
+        inactivity = datetime.now(timezone.utc) - last_activity
+
+        if inactivity > timedelta(hours=CONVERSATION_TIMEOUT_HOURS):
+            logger.info(
+                f"Conversación {conversation.id} expirada tras "
+                f"{inactivity.total_seconds()/3600:.1f}h de inactividad — cerrando"
+            )
+            conversation.status = "closed"
+            await db.flush()
+            conversation = None  # Forzar creación de nueva conversación
 
     if not conversation:
         conversation = Conversation(
