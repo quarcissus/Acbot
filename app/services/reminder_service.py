@@ -40,10 +40,12 @@ async def send_pending_reminders() -> None:
 
             for appointment, contact, tenant in rows:
                 try:
-                    # Formatear fecha/hora legible
+                    # Convertir a hora de México (UTC-6 fijo)
+                    from datetime import timedelta
+                    mexico_offset = timezone(timedelta(hours=-6))
                     scheduled_local = appointment.scheduled_at.replace(
                         tzinfo=timezone.utc
-                    )
+                    ).astimezone(mexico_offset)
                     datetime_str = scheduled_local.strftime("%d/%m/%Y a las %H:%M")
 
                     await send_appointment_reminder(

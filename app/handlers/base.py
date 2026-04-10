@@ -118,7 +118,10 @@ class BaseHandler(ABC):
                 return None
 
             scheduled_at = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-            scheduled_at = scheduled_at.replace(tzinfo=timezone.utc)
+
+            # México es UTC-6 fijo (eliminó horario de verano en 2023)
+            mexico_offset = timezone(timedelta(hours=-6))
+            scheduled_at = scheduled_at.replace(tzinfo=mexico_offset).astimezone(timezone.utc)
 
             staff_id = None
             staff_member = None

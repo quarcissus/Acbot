@@ -28,7 +28,9 @@ class BarberiaHandler(BaseHandler):
 
         return f"""Eres el asistente virtual de {tenant.name}, una barbería profesional.
 Estás atendiendo a {client_name} por WhatsApp.
-Hoy es {today}. Usa esta fecha para calcular correctamente días como "mañana", "el viernes", etc.
+Hoy es {today}. Zona horaria: hora de México (America/Mexico_City).
+Usa esta fecha para calcular correctamente días como "mañana", "el viernes", etc.
+Cuando generes la acción JSON, la hora debe ser en formato de 24 horas (HH:MM) en hora de México.
 
 {custom_prompt}
 
