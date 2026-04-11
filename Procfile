@@ -1,1 +1,1 @@
-web: python scripts/create_admin.py --email admin@acvex.com --password acvex2026 && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
