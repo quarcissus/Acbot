@@ -1,1 +1,1 @@
-web: python scripts/create_admin.py --email admin@email.com --password pass1234 && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: python scripts/create_admin.py --email admin@real.com --password mipass123 && uvicorn app.main:app --host 0.0.0.0 --port $PORT
