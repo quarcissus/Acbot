@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.core.database import engine, Base
 from app.gateway.webhook import router as webhook_router
+from app.api import register_api_routers
 from app.services.reminder_service import start_scheduler, stop_scheduler
 import app.models  # noqa: F401 — necesario para que Base conozca los modelos
 
@@ -70,6 +71,7 @@ app.add_middleware(
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(webhook_router)
+register_api_routers(app)
 
 
 @app.get("/", tags=["health"])
