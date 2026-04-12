@@ -113,29 +113,3 @@ async def update_staff(
     await db.flush()
     logger.info(f"Staff {staff.name} actualizado en tenant {slug}")
     return staff
-
-
-# ── PUBLIC ENDPOINT — sin autenticación ──────────────────────────────────────
-
-public_router = APIRouter(prefix="/api/public/tenants/{slug}", tags=["public"])
-
-
-@public_router.get("/staff", response_model=list[StaffOut])
-async def get_public_staff(
-    slug: str,
-    db: AsyncSession = Depends(get_db),
-) -> list[StaffOut]:
-    """Endpoint público para obtener la lista de barberos activos."""
-    result = await db.execute(
-        select(Tenant).where(Tenant.slug == slug)
-    )
-    tenant = result.scalar_one_or_none()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Negocio no encontrado")
-
-    result = await db.execute(
-        select(Staff)
-        .where(and_(Staff.tenant_id == tenant.id, Staff.is_active == True))  # noqa: E712
-        .order_by(Staff.name)
-    )
-    return list(result.scalars().all())
