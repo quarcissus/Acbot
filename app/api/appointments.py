@@ -4,7 +4,7 @@ Appointments API — ver y gestionar citas por tenant.
 
 import uuid
 import logging
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, timedelta, date
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -211,11 +211,6 @@ async def create_public_appointment(
     No requiere autenticación — cualquier visitante puede usarlo.
     """
     from datetime import timedelta
-    from sqlalchemy import select, and_
-    from app.models.tenant import Tenant
-    from app.models.contact import Contact
-    from app.models.staff import Staff
-    from app.models.appointment import Appointment
     from app.services.staff_service import get_staff_by_name, is_staff_available
     from app.services.contact_service import get_or_create_contact
 
@@ -310,7 +305,6 @@ async def get_public_appointments(
     Solo retorna campos no sensibles.
     """
     from datetime import timedelta
-    from app.models.tenant import Tenant
 
     result = await db.execute(select(Tenant).where(Tenant.slug == slug))
     tenant = result.scalar_one_or_none()
@@ -374,9 +368,6 @@ async def get_public_staff(
     db: AsyncSession = Depends(get_db),
 ) -> list:
     """Endpoint público para obtener barberos activos de un tenant."""
-    from app.models.staff import Staff
-    from app.models.tenant import Tenant
-
     result = await db.execute(select(Tenant).where(Tenant.slug == slug))
     tenant = result.scalar_one_or_none()
     if not tenant:
