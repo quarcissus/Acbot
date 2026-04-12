@@ -29,6 +29,10 @@ class Staff(Base):
     appointments: Mapped[list["Appointment"]] = relationship(  # noqa: F821
         "Appointment", back_populates="staff", lazy="noload"
     )
+    staff_hours: Mapped[list["StaffHours"]] = relationship(  # noqa: F821
+        "StaffHours", back_populates="staff", lazy="noload",
+        order_by="StaffHours.weekday"
+    )
 
     def __repr__(self) -> str:
         return f"<Staff {self.name} (tenant: {self.tenant_id})>"

@@ -58,13 +58,28 @@ class BarberiaHandler(BaseHandler):
 
         base_prompt = self.get_system_prompt(tenant, contact, hours_text, today_hours, open_days_str)
 
-        # Cargar staff activo
+        # Cargar staff activo con sus horarios
         try:
+            from app.services.staff_hours_service import get_staff_hours, format_staff_hours_for_prompt
             staff_list = await get_active_staff(db, tenant.id)
             if staff_list:
                 names = [s.name for s in staff_list]
                 staff_names = ", ".join(names[:-1]) + f" o {names[-1]}" if len(names) > 1 else names[0]
                 base_prompt += f"\n\nBARBEROS DISPONIBLES EN EL NEGOCIO: {staff_names}\nSiempre pregunta al cliente con cuál de estos barberos quiere su cita."
+
+                # Agregar horarios por barbero
+                staff_hours_text = ""
+                for s in staff_list:
+                    sh = await get_staff_hours(db, s.id, tenant.id)
+                    working_days = [h for h in sh if h.is_working]
+                    if working_days:
+                        days_str = format_staff_hours_for_prompt(sh)
+                        staff_hours_text += f"\n{s.name}:\n{days_str}"
+
+                if staff_hours_text:
+                    base_prompt += f"\n\nHORARIOS POR BARBERO (usa esto para validar disponibilidad de cada uno):{staff_hours_text}"
+                    base_prompt += "\n\nIMPORTANTE: Cuando el cliente pida cita con un barbero específico, verifica que ese barbero trabaje ese día y en ese horario. Si no trabaja, díselo y sugiere otro día en que sí trabaje."
+
                 logger.info(f"System prompt incluye barberos: {staff_names}")
         except Exception as e:
             logger.warning(f"No se pudo cargar staff: {e}")

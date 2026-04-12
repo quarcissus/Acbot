@@ -3,7 +3,7 @@ API REST — registra todos los routers del panel de control.
 """
 
 from fastapi import FastAPI
-from app.api import auth, tenants, appointments, staff, bot, stats, business_hours
+from app.api import auth, tenants, appointments, staff, bot, stats, business_hours, staff_hours
 from app.api.public import public_router
 
 
@@ -17,3 +17,4 @@ def register_api_routers(app: FastAPI) -> None:
     app.include_router(bot.router)
     app.include_router(stats.router)
     app.include_router(business_hours.router)
+    app.include_router(staff_hours.router)
