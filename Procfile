@@ -1,1 +1,1 @@
-web: python scripts/set_business_hours.py --tenant-slug acvex --preset barberia && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT

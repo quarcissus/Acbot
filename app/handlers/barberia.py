@@ -53,6 +53,9 @@ class BarberiaHandler(BaseHandler):
 
         open_days_str = ", ".join(open_days) if open_days else "ningún día configurado"
 
+        logger.info(f"Horarios cargados para tenant {tenant.slug}: {open_days_str}")
+        logger.info(f"hours_text: {hours_text}")
+
         base_prompt = self.get_system_prompt(tenant, contact, hours_text, today_hours, open_days_str)
 
         # Cargar staff activo
