@@ -1,3 +1,1 @@
-from app.gateway import router
-
-__all__ = ["router"]
+# Gateway package
