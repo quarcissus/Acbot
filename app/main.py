@@ -72,9 +72,10 @@ app.add_middleware(
             "http://localhost:3000",
             "https://acvex-panel.vercel.app",
             "https://somo-barbaros.vercel.app",
+            "https://somo-barbaros-h0z641x8t-quarcissus-projects.vercel.app",
         ]
     ),
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
