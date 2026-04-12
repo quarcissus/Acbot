@@ -4,7 +4,7 @@ Se inicializa en main.py durante el startup de la app.
 """
 
 import logging
-from datetime import timezone
+from datetime import timezone, timedelta
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -17,8 +17,24 @@ from app.gateway.template_sender import send_appointment_reminder
 
 logger = logging.getLogger(__name__)
 
-# Instancia global del scheduler
 scheduler = AsyncIOScheduler(timezone="UTC")
+
+DAYS_ES = {
+    0: "lunes", 1: "martes", 2: "miércoles", 3: "jueves",
+    4: "viernes", 5: "sábado", 6: "domingo"
+}
+MONTHS_ES = {
+    1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+    5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+    9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
+}
+
+
+def format_date_es(dt) -> str:
+    """Formatea fecha como 'lunes 14 de abril'"""
+    day_name = DAYS_ES[dt.weekday()]
+    month_name = MONTHS_ES[dt.month]
+    return f"{day_name} {dt.day} de {month_name}"
 
 
 async def send_pending_reminders() -> None:
@@ -40,21 +56,22 @@ async def send_pending_reminders() -> None:
 
             for appointment, contact, tenant in rows:
                 try:
-                    # Convertir a hora de México (UTC-6 fijo)
-                    from datetime import timedelta
-                    mexico_offset = timezone(timedelta(hours=-6))
+                    # Convertir a hora México (UTC-6)
+                    mexico_tz = timezone(timedelta(hours=-6))
                     scheduled_local = appointment.scheduled_at.replace(
                         tzinfo=timezone.utc
-                    ).astimezone(mexico_offset)
-                    datetime_str = scheduled_local.strftime("%d/%m/%Y a las %H:%M")
+                    ).astimezone(mexico_tz)
+
+                    date_str = format_date_es(scheduled_local)
+                    time_str = scheduled_local.strftime("%H:%M")
 
                     await send_appointment_reminder(
                         phone_number_id=tenant.whatsapp_phone_id,
                         to=contact.phone_number,
                         client_name=contact.name,
-                        service=appointment.title,
-                        datetime_str=datetime_str,
                         business_name=tenant.name,
+                        date_str=date_str,
+                        time_str=time_str,
                     )
 
                     await mark_reminder_sent(db, appointment.id)
@@ -69,7 +86,6 @@ async def send_pending_reminders() -> None:
                     logger.error(
                         f"Error enviando recordatorio para cita {appointment.id}: {e}"
                     )
-                    # Continuar con los demás recordatorios aunque uno falle
                     continue
 
         except Exception as e:
@@ -85,7 +101,7 @@ def start_scheduler() -> None:
         id="send_reminders",
         name="Enviar recordatorios de citas",
         replace_existing=True,
-        max_instances=1,  # Evita que se ejecute en paralelo
+        max_instances=1,
     )
     scheduler.start()
     logger.info("Scheduler iniciado — recordatorios cada 15 minutos")

@@ -23,12 +23,9 @@ async def send_template_message(
     Args:
         phone_number_id: Phone Number ID del tenant.
         to: Número del destinatario sin '+'.
-        template_name: Nombre exacto del template en Meta (ej: "appointment_reminder").
+        template_name: Nombre exacto del template en Meta.
         language_code: Código de idioma (ej: "es_MX").
-        body_parameters: Lista de strings que reemplazan {{1}}, {{2}}, etc. en el template.
-
-    Returns:
-        Respuesta JSON de Meta.
+        body_parameters: Lista de strings que reemplazan {{1}}, {{2}}, etc.
     """
     url = f"{settings.meta_graph_url}/{phone_number_id}/messages"
     headers = {
@@ -38,14 +35,10 @@ async def send_template_message(
 
     components = []
     if body_parameters:
-        components.append(
-            {
-                "type": "body",
-                "parameters": [
-                    {"type": "text", "text": param} for param in body_parameters
-                ],
-            }
-        )
+        components.append({
+            "type": "body",
+            "parameters": [{"type": "text", "text": param} for param in body_parameters],
+        })
 
     payload = {
         "messaging_product": "whatsapp",
@@ -77,18 +70,63 @@ async def send_appointment_reminder(
     phone_number_id: str,
     to: str,
     client_name: str,
-    service: str,
-    datetime_str: str,
     business_name: str,
+    date_str: str,
+    time_str: str,
 ) -> dict:
     """
-    Shortcut para enviar el template 'appointment_reminder'.
-    Template: "Hola {{1}}, te recordamos que tienes una cita de {{2}} para {{3}} en {{4}}."
+    Envía el template 'appointment_reminder'.
+
+    Template: "Hola {{1}}, te recordamos tu cita en {{2}} el {{3}} a las {{4}}.
+    Si necesitas cancelar o cambiar, responde este mensaje."
+
+    Variables:
+        {{1}} = nombre del cliente
+        {{2}} = nombre del negocio
+        {{3}} = fecha (ej: "lunes 14 de abril")
+        {{4}} = hora (ej: "10:00")
     """
     return await send_template_message(
         phone_number_id=phone_number_id,
         to=to,
         template_name="appointment_reminder",
         language_code="es_MX",
-        body_parameters=[client_name, service, datetime_str, business_name],
+        body_parameters=[client_name, business_name, date_str, time_str],
+    )
+
+
+async def send_appointment_confirmation(
+    phone_number_id: str,
+    to: str,
+    client_name: str,
+    business_name: str,
+    date_str: str,
+    time_str: str,
+    barber_name: str | None = None,
+) -> dict:
+    """
+    Envía el template 'appointment_confirmation'.
+
+    Template: "Hola {{1}}, tu cita en {{2}} fue confirmada para el {{3}}
+    a las {{4}} con {{5}}. Te esperamos!"
+
+    Variables:
+        {{1}} = nombre del cliente
+        {{2}} = nombre del negocio
+        {{3}} = fecha
+        {{4}} = hora
+        {{5}} = nombre del barbero (o "nuestro equipo" si no hay)
+    """
+    return await send_template_message(
+        phone_number_id=phone_number_id,
+        to=to,
+        template_name="appointment_confirm",
+        language_code="es_MX",
+        body_parameters=[
+            client_name,
+            business_name,
+            date_str,
+            time_str,
+            barber_name or "nuestro equipo",
+        ],
     )
