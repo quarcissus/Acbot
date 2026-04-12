@@ -11,6 +11,8 @@ def register_api_routers(app: FastAPI) -> None:
     app.include_router(auth.router)
     app.include_router(tenants.router)
     app.include_router(appointments.router)
+    app.include_router(appointments.public_router)  # público, sin auth
     app.include_router(staff.router)
+    app.include_router(staff.public_router)          # público, sin auth
     app.include_router(bot.router)
     app.include_router(stats.router)
