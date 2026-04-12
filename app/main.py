@@ -70,7 +70,8 @@ app.add_middleware(
             settings.webhook_base_url,
             "http://localhost:5173",
             "http://localhost:3000",
-            "https://acvex-panel.vercel.app",  # actualizar con tu dominio real de Vercel
+            "https://acvex-panel.vercel.app",
+            "https://somo-barbaros.vercel.app",
         ]
     ),
     allow_methods=["GET", "POST", "PUT", "DELETE"],
