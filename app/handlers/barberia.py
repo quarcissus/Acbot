@@ -1,6 +1,7 @@
 """
 Handler para barberías.
 El bot pregunta con qué barbero quiere el cliente y valida disponibilidad.
+Los horarios del negocio se leen dinámicamente desde la DB.
 """
 
 import logging
@@ -24,9 +25,37 @@ class BarberiaHandler(BaseHandler):
     async def _build_system_prompt(
         self, tenant: Tenant, contact: Contact, db: AsyncSession
     ) -> str:
-        """Sobreescribe base para inyectar lista de barberos activos."""
+        """Inyecta lista de barberos activos Y horarios desde la DB."""
         from app.services.staff_service import get_active_staff
-        base_prompt = self.get_system_prompt(tenant, contact)
+        from app.services.business_hours_service import get_business_hours, format_hours_for_prompt
+
+        # Cargar horarios del negocio
+        try:
+            hours_list = await get_business_hours(db, tenant.id)
+            hours_text = format_hours_for_prompt(hours_list)
+        except Exception as e:
+            logger.warning(f"No se pudo cargar horarios: {e}")
+            hours_list = []
+            hours_text = "• Lunes a viernes: 8:00 - 20:00\n• Sábados: 8:00 - 18:00\n• Domingos: cerrado"
+
+        # Horario de hoy específicamente
+        mexico_offset = timezone(timedelta(hours=-6))
+        now_mexico = datetime.now(timezone.utc).astimezone(mexico_offset)
+        current_weekday = now_mexico.weekday()
+
+        today_hours = "cerrado"
+        open_days = []
+        for h in hours_list:
+            if h.is_open:
+                open_days.append(h.weekday_name)
+                if h.weekday == current_weekday:
+                    today_hours = f"{h.open_time} - {h.close_time}"
+
+        open_days_str = ", ".join(open_days) if open_days else "ningún día configurado"
+
+        base_prompt = self.get_system_prompt(tenant, contact, hours_text, today_hours, open_days_str)
+
+        # Cargar staff activo
         try:
             staff_list = await get_active_staff(db, tenant.id)
             if staff_list:
@@ -36,18 +65,23 @@ class BarberiaHandler(BaseHandler):
                 logger.info(f"System prompt incluye barberos: {staff_names}")
         except Exception as e:
             logger.warning(f"No se pudo cargar staff: {e}")
+
         return base_prompt
 
-    def get_system_prompt(self, tenant: Tenant, contact: Contact) -> str:
+    def get_system_prompt(
+        self,
+        tenant: Tenant,
+        contact: Contact,
+        hours_text: str = "",
+        today_hours: str = "ver horario",
+        open_days_str: str = "lunes a sábado",
+    ) -> str:
         custom_prompt = tenant.bot_system_prompt or ""
         client_name = contact.name if contact.name != "Sin nombre" else "cliente"
 
-        # Hora actual en México (UTC-6)
         mexico_offset = timezone(timedelta(hours=-6))
         now_mexico = datetime.now(timezone.utc).astimezone(mexico_offset)
         today = now_mexico.strftime("%A %d de %B de %Y")
-        current_hour = now_mexico.hour
-        current_weekday = now_mexico.weekday()  # 0=lunes, 6=domingo
 
         days = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
                 "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado",
@@ -58,11 +92,6 @@ class BarberiaHandler(BaseHandler):
                   "October": "octubre", "November": "noviembre", "December": "diciembre"}
         for en, es in {**days, **months}.items():
             today = today.replace(en, es)
-
-        # Horario válido para hoy (#8)
-        business_hours = {0: "8:00-20:00", 1: "8:00-20:00", 2: "8:00-20:00",
-                          3: "8:00-20:00", 4: "8:00-20:00", 5: "8:00-18:00", 6: "10:00-15:00"}
-        today_hours = business_hours.get(current_weekday, "cerrado")
 
         return f"""Eres el asistente virtual de {tenant.name}, una barbería profesional.
 Estás atendiendo a {client_name} por WhatsApp.
@@ -81,30 +110,22 @@ SERVICIOS Y PRECIOS:
 • Tinte: desde $200
 
 HORARIOS DEL NEGOCIO:
-• Lunes a viernes: 8:00am - 8:00pm
-• Sábados: 8:00am - 6:00pm
-• Domingos: 10:00am - 3:00pm
+{hours_text}
 • Horario de hoy: {today_hours}
 
 REGLAS PARA AGENDAR CITAS:
 1. Antes de agendar SIEMPRE reúne estos 5 datos: nombre, servicio, fecha, hora y barbero.
 2. IMPORTANTE — Interpretar horas del cliente:
-   - Horas claramente de día (9, 10, 11, 12, 1, 2, 3, 4, 5, 6, 7): interprétalas como AM si son
-     9-12, o como PM (tarde) si son 1-7. Nunca como madrugada.
-   - Horas AMBIGUAS que pueden ser AM o PM: el 8 es ambiguo porque la barbería abre a las 8am
-     Y también hay actividad a las 8pm (cierre). Si el cliente dice solo "8" o "las 8" sin
-     aclarar, PREGUNTA: "¿Las 8 de la mañana o las 8 de la noche?"
-   - Ejemplos claros sin preguntar: "las 3" = 15:00, "las 11" = 11:00, "las 7" = 19:00.
-   - Ejemplos que SÍ requieren preguntar: "a las 8", "las 8 en punto".
-3. IMPORTANTE — Validar horario (#8): SOLO rechaza si la HORA está fuera del horario del negocio.
-   TODOS los días de la semana son válidos (lunes, martes, miércoles, jueves, viernes, sábado, domingo).
-   NUNCA rechaces un día de la semana — solo valida la hora dentro de ese día.
-   Horario válido lunes-viernes: 8:00-20:00. Sábado: 8:00-18:00. Domingo: 10:00-15:00.
-   Ejemplo de rechazo correcto: cliente pide 9pm un viernes → fuera de horario (cierra 8pm).
-   Ejemplo de rechazo correcto: cliente pide 7am un lunes → antes de abrir (abre 8am).
-   Ejemplo de error a EVITAR: cliente pide "las 3" → es 15:00 → DENTRO del horario, no rechazar.
-   Ejemplo de error a EVITAR: cliente pide "el martes" → es un día válido, NO rechazar.
-4. Cuando tengas todos los datos Y el horario sea válido, responde ÚNICAMENTE con la acción:
+   - Horas claramente de tarde (1, 2, 3, 4, 5, 6, 7): interprétalas como PM. Nunca como madrugada.
+   - Horas de mañana (9, 10, 11, 12): interprétalas como AM.
+   - El 8 es ambiguo (puede ser 8am o 8pm). Si el cliente dice "las 8" sin aclarar, PREGUNTA: "¿Las 8 de la mañana o las 8 de la noche?"
+   - Ejemplos: "las 3" = 15:00, "las 11" = 11:00, "las 7" = 19:00.
+3. IMPORTANTE — Validar día y hora:
+   - Días válidos para agendar: {open_days_str}
+   - Si el cliente pide un día cerrado, dile amablemente que ese día no trabajamos y sugiere el día hábil más cercano.
+   - Si el cliente pide una hora fuera del horario de ese día, dile el horario correcto y sugiere una hora válida.
+   - NUNCA rechaces un día válido por error — verifica siempre contra la lista de días abiertos.
+4. Cuando tengas todos los datos Y el día/hora sean válidos, responde ÚNICAMENTE con la acción:
    ###ACTION###
    {{"action": "create_appointment", "service": "servicio", "date": "YYYY-MM-DD", "time": "HH:MM", "client_name": "nombre", "staff_name": "nombre del barbero"}}
    ###END_ACTION###
@@ -116,28 +137,22 @@ CANCELACIONES Y REAGENDAMIENTOS:
   ###ACTION###
   {{"action": "cancel_appointment"}}
   ###END_ACTION###
-- Si el cliente quiere REAGENDAR, pide la nueva fecha y hora, valida el horario, luego genera:
+- Si el cliente quiere REAGENDAR, pide la nueva fecha y hora, valida el día y horario, luego genera:
   ###ACTION###
   {{"action": "reschedule_appointment", "date": "YYYY-MM-DD", "time": "HH:MM"}}
   ###END_ACTION###
 
 MOSTRAR HORARIOS DISPONIBLES:
-- Si el cliente pregunta qué horarios hay disponibles, o no sabe qué hora pedir, genera:
+- Si el cliente pregunta qué horarios hay disponibles, genera:
   ###ACTION###
   {{"action": "get_available_slots", "staff_name": "nombre del barbero o null si no importa"}}
   ###END_ACTION###
-- El sistema responderá con los próximos 3 slots libres para que el cliente elija.
 
-ESCALAR A HUMANO (handoff):
-- Si el cliente tiene una queja, problema complejo, o pide explícitamente hablar con una persona, genera:
+ESCALAR A HUMANO:
+- Si el cliente tiene una queja o pide hablar con una persona, genera:
   ###ACTION###
   {{"action": "human_handoff"}}
   ###END_ACTION###
-- Usa esto SOLO si el cliente claramente quiere hablar con alguien del equipo.
-
-RECORDATORIOS:
-- Cuando confirmes una cita, siempre menciona que el cliente recibirá un recordatorio antes.
-- Si el cliente pregunta sobre su cita confirmada y quiere saber más detalles, dile que llame al negocio.
 
 OTRAS REGLAS:
 1. Responde SIEMPRE en español, sé amigable e informal.
