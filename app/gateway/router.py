@@ -18,9 +18,6 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from app.models.tenant import Tenant
-from app.models.contact import Contact
-from app.models.conversation import Conversation, Message
 from app.gateway.sender import send_text_message, mark_as_read
 
 logger = logging.getLogger(__name__)
@@ -43,6 +40,10 @@ async def route_incoming_message(
         message_body: Texto del mensaje.
         wa_message_id: ID del mensaje en WhatsApp (para deduplicación y read receipts).
     """
+    from app.models.tenant import Tenant
+    from app.models.contact import Contact
+    from app.models.conversation import Conversation, Message
+
     # 1. Buscar tenant por phone_number_id
     tenant = await _get_tenant_by_phone_id(db, phone_number_id)
     if not tenant:
@@ -133,8 +134,9 @@ async def route_incoming_message(
 
 async def _get_tenant_by_phone_id(
     db: AsyncSession, phone_number_id: str
-) -> Tenant | None:
+):
     """Busca un tenant por su whatsapp_phone_id."""
+    from app.models.tenant import Tenant
     result = await db.execute(
         select(Tenant).where(Tenant.whatsapp_phone_id == phone_number_id)
     )
@@ -143,8 +145,9 @@ async def _get_tenant_by_phone_id(
 
 async def _get_or_create_contact(
     db: AsyncSession, tenant_id, phone_number: str
-) -> Contact:
+):
     """Busca un contacto existente o crea uno nuevo."""
+    from app.models.contact import Contact
     result = await db.execute(
         select(Contact).where(
             and_(
