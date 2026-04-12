@@ -232,3 +232,55 @@ async def create_public_appointment(
         contact_name=contact.name,
         staff_name=staff_member.name if staff_member else None,
     )
+
+
+class StaffHoursPublicOut(BaseModel):
+    weekday: int
+    weekday_name: str
+    is_working: bool
+    start_time: str
+    end_time: str
+
+
+WEEKDAY_NAMES_PUBLIC = {
+    0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves",
+    4: "Viernes", 5: "Sábado", 6: "Domingo"
+}
+
+
+@public_router.get("/staff/{staff_id}/hours", response_model=list[StaffHoursPublicOut])
+async def get_public_staff_hours(
+    slug: str,
+    staff_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> list[StaffHoursPublicOut]:
+    """Endpoint público para obtener horarios de un barbero (para el calendario de booking)."""
+    from app.models.tenant import Tenant
+    from app.models.staff import Staff
+    from app.services.staff_hours_service import get_staff_hours
+
+    result = await db.execute(select(Tenant).where(Tenant.slug == slug))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Negocio no encontrado")
+
+    result = await db.execute(
+        select(Staff).where(
+            and_(Staff.id == staff_id, Staff.tenant_id == tenant.id)
+        )
+    )
+    staff = result.scalar_one_or_none()
+    if not staff:
+        raise HTTPException(status_code=404, detail="Barbero no encontrado")
+
+    hours = await get_staff_hours(db, staff_id, tenant.id)
+    return [
+        StaffHoursPublicOut(
+            weekday=h.weekday,
+            weekday_name=WEEKDAY_NAMES_PUBLIC.get(h.weekday, f"Día {h.weekday}"),
+            is_working=h.is_working,
+            start_time=h.start_time,
+            end_time=h.end_time,
+        )
+        for h in hours
+    ]
